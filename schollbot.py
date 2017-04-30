@@ -5,8 +5,7 @@ from slackclient import SlackClient
 
 
 # starterbot's ID as an environment variable
-#BOT_ID = os.environ.get("BOT_ID")
-BOT_ID = 'U4M86BLHK'
+BOT_ID = os.environ.get("BOT_ID")
 
 # constants
 AT_BOT = "<@" + BOT_ID + ">"
@@ -18,6 +17,11 @@ slack_client = SlackClient(bottoken)
 text_model = None
 
 def get_ready():
+    """
+        Assembles a large string comprised of Scholl's Blog, select
+        Urbandictionary.com enries, and 'successful' Schollbot outputs.
+        Primes the Markovify engine with aforementioned string 'text'.
+    """
     with open("scholl_blog") as f:
         text = f.read()
     with open("schollbot_text") as f:
@@ -27,7 +31,6 @@ def get_ready():
     global text_model
     text_model = markovify.Text(text)
     
-
 
 def handle_command(command, channel):
     """
@@ -41,22 +44,24 @@ def handle_command(command, channel):
                           text=response, as_user=True)
 
 def handle_reaction(command, channel):
+    """
+        When Schollbot has a message starred or reacted to, records
+        message to schollbot_successes. Does not currently prevent 
+        multiple reactions triggering multiple writes.
+    """
     channel_status = slack_client.api_call("channels.info", channel=channel)
     if not channel_status['ok'] and "channel_not_found" in channel_status['error']:
         #possibly a private channel?
         channel_status = slack_client.api_call("groups.info", channel=channel)
         if channel_status['ok']:
-            print("calling groups.history, channel: " + channel)
-            print("latest: " + command)
             message = slack_client.api_call("groups.history", channel=channel,
                                     latest=command, inclusive=True, count=1)
         else:
-            print("ERROR!")
+            print("ERROR! Reaction recorded for Channel " + channel + \
+                  " which is not available via channels.info or groups.info:")
             print(message)
             return None
     else:
-        print("calling channels.history, channel: " + channel)
-        print("latest: " + command)
         message = slack_client.api_call("channels.history", channel=channel,
                                         latest=command, inclusive=True, count=1)
     if message and 'messages' in message:
@@ -83,14 +88,10 @@ def parse_slack_output(slack_rtm_output):
                            output['text'].split(AT_BOT)[1].strip().lower(), \
                            output['channel']
                 elif 'reaction_added' in output['type'] and BOT_ID in output['item_user']:
-                        print("reaction added")
-                        print(output)
                         return 'reaction_added', \
                                output['item']['ts'], \
                                output['item']['channel']
                 elif 'star_added' in output['type'] and BOT_ID in output['item_user']:
-                        print("star added")
-                        print(output)
                         return 'star_added', \
                                output['item']['ts'], \
                                output['item']['channel']
